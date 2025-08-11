@@ -7,7 +7,7 @@ import multiprocessing
 import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-
+import numpy as np
 from backtester import ejecutar_backtest_avanzado, SIMBOLO_A_TESTEAR, FECHA_INICIO
 import api_client
 import indicators
@@ -27,19 +27,16 @@ parameter_grid = {
 }
 
 def worker_backtest(params_tuple):
-    """Función de envoltura para que el pool de procesos pueda llamar al backtester."""
     params, datos_completos = params_tuple
-    # Devuelve el diccionario completo de resultados
     return ejecutar_backtest_avanzado(params, datos_completos, verbose=False)
 
 def optimizar_estrategia_paralelo():
     start_time = time.time()
-    print("--- INICIANDO OPTIMIZADOR DE ESTRATEGIA (ACELERADO CON MULTIPROCESAMIENTO) ---")
+    print("--- INICIANDO OPTIMIZADOR DE ESTRATEGIA (CON MÉTRICAS AVANZADAS) ---")
     
     token = api_client.obtener_token()
     if not token: return
     
-    # Calcular fecha de inicio extendida para tener suficientes datos para cualquier combinación
     historial_extendido_inicio = FECHA_INICIO - timedelta(days=max(parameter_grid['dias_volatilidad']) + max(parameter_grid['dias_momento']))
     trades_data = api_client.obtener_datos_historicos(token, SIMBOLO_A_TESTEAR, 
         historial_extendido_inicio.strftime('%Y-%m-%d'), 
@@ -65,7 +62,6 @@ def optimizar_estrategia_paralelo():
         print("\nNo se completó ninguna prueba.")
         return
 
-    # Aplanar los resultados para mostrarlos en una tabla
     resultados_planos = []
     for res in resultados:
         fila = res['parametros'].copy()
@@ -86,28 +82,64 @@ def optimizar_estrategia_paralelo():
     print("\n--------------------------------------------------")
     print(f"Optimización completada en { (end_time - start_time) / 60:.2f} minutos.")
 
-    # GENERAR GRÁFICOS
-    print("\n--- Generando Gráficos de Rendimiento para el Top 3 ---")
+    # --- NUEVO: GENERAR GRÁFICO COMPARATIVO CON TABLA ---
+    print("\n--- Generando Gráfico Comparativo de Rendimiento para el Top 3 ---")
+    
+    # 1. Preparar la figura y los ejes para el gráfico
+    fig, ax = plt.subplots(figsize=(15, 8))
+    
+    table_data = []
+    colors = ['blue', 'orange', 'green']
+    
+    # 2. Iterar sobre los 3 mejores resultados para plotear cada curva
     for i in range(min(3, len(resultados_df))):
         top_resultado = resultados_df.iloc[i]
         curva = top_resultado['equity_curve']
         
-        if not curva: continue
+        if not curva:
+            print(f"Rank {i+1} no tiene curva de equity para graficar.")
+            continue
             
         df_curva = pd.DataFrame(curva)
         df_curva['timestamp'] = pd.to_datetime(df_curva['timestamp'])
         
-        plt.figure(figsize=(12, 6))
-        plt.plot(df_curva['timestamp'], df_curva['equity'])
-        plt.title(f'Rendimiento en el Tiempo - Rank #{i+1}\nRendimiento: {top_resultado["rendimiento"]:.2f}% | Max Drawdown: {top_resultado["max_drawdown"]:.2f}%')
-        plt.xlabel('Fecha y Hora')
-        plt.ylabel('Valor del Portafolio (Equity)')
-        plt.grid(True)
-        plt.tight_layout()
+        # Plotear la curva de equity en los ejes
+        ax.plot(df_curva['timestamp'], df_curva['equity'], label=f'Rank #{i+1} (Rend: {top_resultado["rendimiento"]:.2f}%)', color=colors[i])
         
-        filename = f'rendimiento_rank_{i+1}.png'
-        plt.savefig(filename)
-        print(f"Gráfico guardado como: {filename}")
+        # Guardar los datos de los parámetros para la tabla
+        params_list = [f"{top_resultado[key]}" for key in parameter_grid.keys()]
+        table_data.append(params_list)
+
+    # Configurar el gráfico principal
+    ax.set_title(f'Comparación de Rendimiento - Top 3 Parámetros\n{SIMBOLO_A_TESTEAR}')
+    ax.set_ylabel('Valor del Portafolio (Equity)')
+    ax.grid(True)
+    ax.legend()
+    
+    # 3. Crear y añadir la tabla de parámetros al gráfico
+    if table_data:
+        # Transponer los datos para que los parámetros queden como filas
+        table_data = np.array(table_data).T 
+        col_labels = [f'Rank #{j+1}' for j in range(len(table_data[0]))]
+        row_labels = list(parameter_grid.keys())
+        
+        # Ajustar el espacio inferior del gráfico para hacer lugar a la tabla
+        fig.subplots_adjust(bottom=0.3)
+        
+        # Añadir la tabla
+        the_table = ax.table(cellText=table_data,
+                             rowLabels=row_labels,
+                             colLabels=col_labels,
+                             loc='bottom',
+                             cellLoc='center',
+                             bbox=[0, -0.5, 1, 0.3]) # Posición y tamaño de la tabla
+        the_table.auto_set_font_size(False)
+        the_table.set_fontsize(8)
+
+    # 4. Guardar la figura completa (gráfico + tabla)
+    filename = 'top_3_rendimiento_comparativo.png'
+    plt.savefig(filename, bbox_inches='tight')
+    print(f"Gráfico comparativo guardado como: {filename}")
     
 if __name__ == "__main__":
     optimizar_estrategia_paralelo()

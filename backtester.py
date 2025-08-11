@@ -12,7 +12,7 @@ import config
 # --- PARÁMETROS FIJOS DE LA SIMULACIÓN ---
 SIMBOLO_A_TESTEAR = "DLR/AGO25"
 FECHA_FIN = datetime.now()
-FECHA_INICIO = FECHA_FIN - timedelta(days=60)
+FECHA_INICIO = FECHA_FIN - timedelta(days=15)
 CAPITAL_INICIAL = 1000000 
 COMISION_POR_TRADE = 0.001
 SPREAD_SIMULADO_PCT = 0.001
@@ -87,7 +87,8 @@ def ejecutar_backtest_avanzado(parametros, datos_completos, verbose=False):
                     rendimiento = (precio_salida - trade['entry_price']) / trade['entry_price']
                     ganancia_o_perdida = trade['capital_al_abrir'] * rendimiento
                     capital_con_ganancia = capital + ganancia_o_perdida
-                    comision_cierre = abs(ganancia_o_perdida) * COMISION_POR_TRADE
+                    valor_salida = trade['capital_al_abrir'] * (1 + rendimiento)
+                    comision_cierre = valor_salida * COMISION_POR_TRADE
                     capital = capital_con_ganancia - comision_cierre
                     trade.update({'salida_fecha': fila_actual.name, 'salida_precio': precio_salida, 'razon_salida': razon_salida, 'rendimiento_%': rendimiento * 100, 'capital_final': capital})
                     if verbose: print(f"  CIERRE {razon_salida} (ID: ...{str(trade['id'])[-4:]}): Precio: {precio_salida:.2f}, Rendimiento: {rendimiento*100:.2f}%")
@@ -124,7 +125,8 @@ def ejecutar_backtest_avanzado(parametros, datos_completos, verbose=False):
                     rendimiento = (precio_salida - trade['entry_price']) / trade['entry_price']
                     ganancia_o_perdida = trade['capital_al_abrir'] * rendimiento
                     capital_con_ganancia = capital + ganancia_o_perdida
-                    comision_cierre = abs(ganancia_o_perdida) * COMISION_POR_TRADE
+                    valor_salida = trade['capital_al_abrir'] * (1 + rendimiento)
+                    comision_cierre = valor_salida * COMISION_POR_TRADE
                     capital = capital_con_ganancia - comision_cierre
                     trade.update({'salida_fecha': fila_actual.name, 'salida_precio': precio_salida, 'razon_salida': 'FIN_DEL_DIA', 'rendimiento_%': rendimiento * 100, 'capital_final': capital})
                     if verbose: print(f"  CIERRE FIN_DEL_DIA (ID: ...{str(trade['id'])[-4:]}): Precio: {precio_salida:.2f}, Rendimiento: {rendimiento*100:.2f}%")

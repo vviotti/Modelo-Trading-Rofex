@@ -6,3 +6,4 @@ pandas-ta
 setuptools
 websocket-client
 matplotlib
+py-cpuinfo

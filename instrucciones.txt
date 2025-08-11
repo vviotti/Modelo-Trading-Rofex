@@ -1,4 +1,9 @@
 ## Antes activar el entorno virtual: .\venv\Scripts\activate
 
-1) Realizar el backtesting en optimizar.py
+1) Realizar el backtesting en optimizar.py (python optimizer.py)
 2) Aplicar los parámetros en config.py
+3) Subir a GitHub
+	git add .
+	git commit -m "Commit"
+	git push -u origin main
+4) Ejecutar Bot (python live_bot.py)    
