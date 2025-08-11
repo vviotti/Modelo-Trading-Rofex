@@ -8,12 +8,17 @@ import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 from backtester import ejecutar_backtest_avanzado, FECHA_INICIO
 import api_client
 import indicators
 
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', 1000) # Para que la tabla se vea más ancha
+
+# --- CONFIGURACIÓN DE LA OPTIMIZACIÓN ---
+# Define el número de combinaciones aleatorias a probar
+NUM_RANDOM_COMBINATIONS = 500
 
 # La grilla de parámetros es la misma
 parameter_grid = {
@@ -52,8 +57,20 @@ def optimizar_estrategia_paralelo():
     datos_completos = indicators.procesar_y_calcular_indicadores(trades_data)
     if datos_completos is None: return
 
-    keys, values = zip(*parameter_grid.items())
-    combinaciones = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    # --- LÓGICA DE BÚSQUEDA ALEATORIA (RANDOM SEARCH) ---
+    keys = list(parameter_grid.keys())
+    combinaciones_unicas = set()
+
+    # Generar combinaciones aleatorias únicas
+    while len(combinaciones_unicas) < NUM_RANDOM_COMBINATIONS:
+        params_tuple = tuple(random.choice(parameter_grid[key]) for key in keys)
+        combinaciones_unicas.add(params_tuple)
+        if len(combinaciones_unicas) >= len(list(itertools.product(*parameter_grid.values()))):
+            break # Evitar bucle infinito si el espacio de búsqueda es pequeño
+
+    combinaciones = [dict(zip(keys, combo)) for combo in combinaciones_unicas]
+    print(f"\nSe generaron {len(combinaciones)} combinaciones aleatorias únicas para probar.")
+
     tasks = [(symbol_to_test, params, datos_completos) for params in combinaciones]
     
     num_cores = multiprocessing.cpu_count()
