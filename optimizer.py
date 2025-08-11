@@ -8,7 +8,7 @@ import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
-from backtester import ejecutar_backtest_avanzado, SIMBOLO_A_TESTEAR, FECHA_INICIO
+from backtester import ejecutar_backtest_avanzado, FECHA_INICIO
 import api_client
 import indicators
 
@@ -27,8 +27,8 @@ parameter_grid = {
 }
 
 def worker_backtest(params_tuple):
-    params, datos_completos = params_tuple
-    return ejecutar_backtest_avanzado(params, datos_completos, verbose=False)
+    symbol, params, datos_completos = params_tuple
+    return ejecutar_backtest_avanzado(symbol, params, datos_completos, verbose=False)
 
 def optimizar_estrategia_paralelo():
     start_time = time.time()
@@ -36,9 +36,15 @@ def optimizar_estrategia_paralelo():
     
     token = api_client.obtener_token()
     if not token: return
+
+    symbol_to_test = api_client.encontrar_futuro_dolar_mas_corto(token)
+    if not symbol_to_test:
+        print("No se pudo encontrar el símbolo del futuro para optimizar. Abortando.")
+        return
+    print(f"\n--- Optimizando para el símbolo: {symbol_to_test} ---")
     
     historial_extendido_inicio = FECHA_INICIO - timedelta(days=max(parameter_grid['dias_volatilidad']) + max(parameter_grid['dias_momento']))
-    trades_data = api_client.obtener_datos_historicos(token, SIMBOLO_A_TESTEAR, 
+    trades_data = api_client.obtener_datos_historicos(token, symbol_to_test,
         historial_extendido_inicio.strftime('%Y-%m-%d'), 
         datetime.now().strftime('%Y-%m-%d'))
     if not trades_data: return
@@ -48,7 +54,7 @@ def optimizar_estrategia_paralelo():
 
     keys, values = zip(*parameter_grid.items())
     combinaciones = [dict(zip(keys, v)) for v in itertools.product(*values)]
-    tasks = [(params, datos_completos) for params in combinaciones]
+    tasks = [(symbol_to_test, params, datos_completos) for params in combinaciones]
     
     num_cores = multiprocessing.cpu_count()
     print(f"\nSe usarán {num_cores} núcleos de CPU para probar {len(combinaciones)} combinaciones.")
@@ -111,7 +117,7 @@ def optimizar_estrategia_paralelo():
         table_data.append(params_list)
 
     # Configurar el gráfico principal
-    ax.set_title(f'Comparación de Rendimiento - Top 3 Parámetros\n{SIMBOLO_A_TESTEAR}')
+    ax.set_title(f'Comparación de Rendimiento - Top 3 Parámetros\n{symbol_to_test}')
     ax.set_ylabel('Valor del Portafolio (Equity)')
     ax.grid(True)
     ax.legend()

@@ -2,8 +2,10 @@ requests
 pandas
 python-telegram-bot
 python-dateutil
-pandas-ta
+pandas-ta==0.3.14b
 setuptools
 websocket-client
 matplotlib
 py-cpuinfo
+tqdm
+numpy==1.26.4
