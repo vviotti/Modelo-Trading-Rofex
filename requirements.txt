@@ -1,0 +1,8 @@
+requests
+pandas
+python-telegram-bot
+python-dateutil
+pandas-ta
+setuptools
+websocket-client
+matplotlib
