@@ -1,6 +1,7 @@
 ## Puedo clonar el repo de GitHub: git clone https://github.com/vviotti/Modelo-Trading-Rofex
-## Antes activar el entorno virtual: .\venv\Scripts\actívate
+## Antes activar el entorno virtual: .\venv\Scripts\Activate.ps1
 	Si el entorno no está instalado --> python -m venv venv
+## Instalar librerías: pip install -r requirements.txt
 
 1) Realizar el backtesting en optimizar.py (python optimizer.py)
 2) Aplicar los parámetros en config.py
