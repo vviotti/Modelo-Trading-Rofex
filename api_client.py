@@ -5,15 +5,12 @@ import config  # Importamos nuestro archivo de configuración
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta # Para cálculos de fechas
 
-# URL base de la API de Remarkets
-BASE_URL = "https://api.remarkets.primary.com.ar"
-
 def obtener_token():
     """
     Se autentica en la API de Remarkets y obtiene un token de sesión.
     """
     print("Obteniendo token de autenticación...")
-    url = f"{BASE_URL}/auth/getToken"
+    url = f"{config.BASE_URL}/auth/getToken"
     headers = {
         "X-Username": config.API_USERNAME,
         "X-Password": config.API_PASSWORD
@@ -44,7 +41,7 @@ def encontrar_futuro_dolar_mas_corto(auth_token):
     Encuentra el contrato de futuro de dólar (DLR) con el vencimiento más cercano.
     """
     print("Buscando el contrato de futuro de dólar más corto...")
-    url = f"{BASE_URL}/rest/instruments/byCFICode"
+    url = f"{config.BASE_URL}/rest/instruments/byCFICode"
     headers = {"X-Auth-Token": auth_token}
     params = {"CFICode": "FXXXSX"}
 
@@ -107,7 +104,7 @@ def obtener_datos_historicos(auth_token, symbol, fecha_inicio, fecha_fin):
     Obtiene los trades históricos para un símbolo en un rango de fechas.
     """
     print(f"Obteniendo datos históricos para {symbol}...")
-    url = f"{BASE_URL}/rest/data/getTrades"
+    url = f"{config.BASE_URL}/rest/data/getTrades"
     headers = {"X-Auth-Token": auth_token}
     params = {
         "marketId": "ROFX",

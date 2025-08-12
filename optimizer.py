@@ -8,22 +8,23 @@ import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
-from backtester import ejecutar_backtest_avanzado, FECHA_INICIO
+from backtester import ejecutar_backtest_avanzado
 import api_client
 import indicators
+import config
 
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', 1000) # Para que la tabla se vea más ancha
 
-# La grilla de parámetros es la misma
+# Reducimos la grilla de parámetros para una optimización más rápida
 parameter_grid = {
-    'dias_volatilidad': [8, 9, 10],
-    'umbral_vol_alto': [0.008, 0.009, 0.010],
-    'umbral_vol_bajo': [0.005, 0.006, 0.007],
-    'dias_momento': [1, 2, 3, 4],
-    'stop_loss_tendencia': [0.01, 0.015, 0.02, 0.025],
-    'take_profit_tendencia': [0.025, 0.03, 0.04, 0.045],
-    'stop_loss_reversion': [0.01, 0.015, 0.02],
+    'dias_volatilidad': [9, 10],
+    'umbral_vol_alto': [0.009],
+    'umbral_vol_bajo': [0.006],
+    'dias_momento': [2, 3],
+    'stop_loss_tendencia': [0.015, 0.02],
+    'take_profit_tendencia': [0.03, 0.04],
+    'stop_loss_reversion': [0.015],
 }
 
 def worker_backtest(params_tuple):
@@ -43,9 +44,12 @@ def optimizar_estrategia_paralelo():
         return
     print(f"\n--- Optimizando para el símbolo: {symbol_to_test} ---")
     
-    historial_extendido_inicio = FECHA_INICIO - timedelta(days=max(parameter_grid['dias_volatilidad']) + max(parameter_grid['dias_momento']))
+    # Calculamos un historial suficiente para cubrir el backtest y los indicadores
+    dias_historial_requerido = config.DIAS_BACKTEST + max(parameter_grid['dias_volatilidad']) + max(parameter_grid['dias_momento']) + 5 # 5 días de margen
+    fecha_inicio_historial = datetime.now() - timedelta(days=dias_historial_requerido)
+
     trades_data = api_client.obtener_datos_historicos(token, symbol_to_test,
-        historial_extendido_inicio.strftime('%Y-%m-%d'), 
+        fecha_inicio_historial.strftime('%Y-%m-%d'),
         datetime.now().strftime('%Y-%m-%d'))
     if not trades_data: return
     

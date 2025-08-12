@@ -14,12 +14,7 @@ import indicators
 import config
 from alerter import enviar_alerta
 
-# --- CONFIGURACIÓN DEL BOT ---
-CUENTA_OPERATIVA = config.API_USERNAME
-HORA_CIERRE_MERCADO = "14:55"
-MAX_POSICIONES_ABIERTAS = 3
-INTERVALO_LOGICA_SEGUNDOS = 300 # Ejecutar la lógica de trading cada 5 minutos
-FACTOR_AUMENTO_VOLUMEN = 1.5
+# (La configuración ahora se lee directamente de config.py)
 
 # --- ESTADO DEL BOT Y DEL MERCADO (Variables Globales) ---
 open_positions = []
@@ -47,24 +42,18 @@ def analizar_agresion(last_price, best_bid, best_ask):
     return "NEUTRAL"
 
 # --- LÓGICA PRINCIPAL DE TRADING ---
-def logica_de_trading(symbol):
-    global market_data, open_positions, regimen_diario
-    print(f"--- [TRADING]: Ciclo de decisión. Posiciones abiertas: {len(open_positions)} ---")
+def logica_de_trading(symbol, datos_indicadores):
+    global open_positions, market_data, regimen_diario
+    
+    if datos_indicadores is None or datos_indicadores.empty or len(datos_indicadores) < 2:
+        print("--- [TRADING]: Datos de indicadores insuficientes.")
+        return
 
-    token = api_client.obtener_token()
-    if not token: return
-    
-    fecha_fin = datetime.now()
-    fecha_inicio = fecha_fin - timedelta(days=5)
-    trades = api_client.obtener_datos_historicos(token, symbol, fecha_inicio.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d'))
-    if not trades: return
-    
-    datos_indicadores = indicators.procesar_y_calcular_indicadores(trades)
-    if datos_indicadores is None: return
     ultima_vela = datos_indicadores.iloc[-1]
-    
-    # --- 1. LÓGICA DE CIERRE DE POSICIONES ---
+    fila_anterior = datos_indicadores.iloc[-2]
+
     with positions_lock:
+        # --- 1. LÓGICA DE CIERRE DE POSICIONES ---
         for trade in list(open_positions):
             precio_actual = market_data['last'].get('price')
             if not precio_actual: continue
@@ -78,7 +67,7 @@ def logica_de_trading(symbol):
                 if es_largo:
                     if precio_actual <= trade['entry_price'] * (1 - sl): razon_salida = "STOP_LOSS"
                     elif precio_actual >= trade['entry_price'] * (1 + tp): razon_salida = "TAKE_PROFIT"
-                else: # Corto
+                else:
                     if precio_actual >= trade['entry_price'] * (1 + sl): razon_salida = "STOP_LOSS"
                     elif precio_actual <= trade['entry_price'] * (1 - tp): razon_salida = "TAKE_PROFIT"
 
@@ -87,7 +76,7 @@ def logica_de_trading(symbol):
                 if es_largo:
                     if precio_actual <= trade['entry_price'] * (1 - sl): razon_salida = "STOP_LOSS"
                     elif precio_actual >= ultima_vela['BBM_20_2.0']: razon_salida = "TAKE_PROFIT (Banda Media)"
-                else: # Corto
+                else:
                     if precio_actual >= trade['entry_price'] * (1 + sl): razon_salida = "STOP_LOSS"
                     elif precio_actual <= ultima_vela['BBM_20_2.0']: razon_salida = "TAKE_PROFIT (Banda Media)"
 
@@ -96,46 +85,40 @@ def logica_de_trading(symbol):
                 enviar_alerta(f"ALERTA DE CIERRE ({razon_salida})\nSímbolo: {symbol}\nDirección: {trade['direction']}\nPrecio Salida: {precio_actual}")
                 open_positions.remove(trade)
 
-    # --- 2. LÓGICA DE APERTURA DE NUEVAS POSICIONES ---
-    with positions_lock:
-        if len(open_positions) < MAX_POSICIONES_ABIERTAS:
+        # --- 2. LÓGICA DE APERTURA DE NUEVAS POSICIONES ---
+        if len(open_positions) < config.MAX_POSICIONES_ABIERTAS:
             with regimen_lock:
-                regimen_vol = regimen_diario["volatilidad"]
-                regimen_momento = regimen_diario["momento"]
+                regimen_vol, regimen_momento = regimen_diario["volatilidad"], regimen_diario["momento"]
 
-            entrada, razon_entrada, estrat, direccion = False, None, None, None
-            fila_anterior = datos_indicadores.iloc[-2]
+            entrada, razon, estrat, direccion = False, None, None, None
 
-            # Estrategias LONG
-            if regimen_vol == "BAJA" and regimen_momento == "POSITIVO":
-                if fila_anterior['MA_9'] < fila_anterior['MA_21'] and ultima_vela['MA_9'] > ultima_vela['MA_21'] and ultima_vela['RSI_14'] < 70:
-                    entrada, razon_entrada, estrat, direccion = True, 'TEND_ALCISTA', "TENDENCIA", "LONG"
-            elif regimen_vol == "ALTA" and regimen_momento == "POSITIVO":
-                if ultima_vela['close'] < ultima_vela['BBL_20_2.0']:
-                    entrada, razon_entrada, estrat, direccion = True, 'REV_ALCISTA', "REVERSION", "LONG"
+            if regimen_vol == "BAJA":
+                if regimen_momento == "POSITIVO" and fila_anterior['MA_9'] < fila_anterior['MA_21'] and ultima_vela['MA_9'] > ultima_vela['MA_21'] and ultima_vela['RSI_14'] < 70:
+                    entrada, razon, estrat, direccion = True, 'TEND_ALCISTA', "TENDENCIA", "LONG"
+                elif regimen_momento == "NEGATIVO" and fila_anterior['MA_9'] > fila_anterior['MA_21'] and ultima_vela['MA_9'] < ultima_vela['MA_21'] and ultima_vela['RSI_14'] > 30:
+                    entrada, razon, estrat, direccion = True, 'TEND_BAJISTA', "TENDENCIA", "SHORT"
 
-            # Estrategias SHORT
-            elif regimen_vol == "BAJA" and regimen_momento == "NEGATIVO":
-                if fila_anterior['MA_9'] > fila_anterior['MA_21'] and ultima_vela['MA_9'] < ultima_vela['MA_21'] and ultima_vela['RSI_14'] > 30:
-                    entrada, razon_entrada, estrat, direccion = True, 'TEND_BAJISTA', "TENDENCIA", "SHORT"
-            elif regimen_vol == "ALTA" and regimen_momento == "NEGATIVO":
-                if ultima_vela['close'] > ultima_vela['BBU_20_2.0']:
-                    entrada, razon_entrada, estrat, direccion = True, 'REV_BAJISTA', "REVERSION", "SHORT"
+            elif regimen_vol == "ALTA":
+                if regimen_momento == "POSITIVO" and ultima_vela['close'] < ultima_vela['BBL_20_2.0']:
+                    entrada, razon, estrat, direccion = True, 'REV_ALCISTA', "REVERSION", "LONG"
+                elif regimen_momento == "NEGATIVO" and ultima_vela['close'] > ultima_vela['BBU_20_2.0']:
+                    entrada, razon, estrat, direccion = True, 'REV_BAJISTA', "REVERSION", "SHORT"
 
             if entrada:
-                print(f"--- [TRADING]: Señal de {direccion} ({razon_entrada}) detectada por indicadores ---")
-                if ultima_vela['volume'] > ultima_vela['volume_MA_50'] * FACTOR_AUMENTO_VOLUMEN:
+                print(f"--- [TRADING]: Señal de {direccion} ({razon}) detectada. Aplicando filtros...")
+                if ultima_vela['volume'] > ultima_vela['volume_MA_50'] * config.FACTOR_AUMENTO_VOLUMEN:
                     with market_data_lock:
                         imbalance = calcular_imbalance(market_data['bids'], market_data['offers'])
-                        imbalance_check = (imbalance > 1.2) if direccion == "LONG" else (imbalance < 0.8) # Chequeo de imbalance para long y short
+                        imbalance_check = (direccion == "LONG" and imbalance > config.IMBALANCE_THRESHOLD_LONG) or \
+                                          (direccion == "SHORT" and imbalance < config.IMBALANCE_THRESHOLD_SHORT)
                     
                     if imbalance_check:
                         print(f">>> ABRIENDO NUEVO TRADE ({direccion}) <<<")
-                        nuevo_trade = { "id": uuid.uuid4(), "direction": direccion, "entry_price": market_data['last'].get('price', ultima_vela['close']), "size": 1, "entry_time": datetime.now(), "strategy": estrat }
+                        nuevo_trade = { "id": uuid.uuid4(), "direction": direccion, "entry_price": market_data['last'].get('price', ultima_vela['close']), "entry_time": datetime.now(), "estrategia": estrat }
                         open_positions.append(nuevo_trade)
-                        enviar_alerta(f"ALERTA DE {direccion}\nSímbolo: {symbol}\nPrecio: {nuevo_trade['entry_price']:.2f}\nEstrategia: {razon_entrada}")
+                        enviar_alerta(f"ALERTA DE {direccion}\nSímbolo: {symbol}\nPrecio: {nuevo_trade['entry_price']:.2f}\nEstrategia: {razon}")
                     else:
-                        print(f"--- [TRADING]: Señal IGNORADA por bajo imbalance ({imbalance:.2f}) en el libro ---")
+                        print(f"--- [TRADING]: Señal IGNORADA por bajo imbalance ({imbalance:.2f}) ---")
                 else:
                     print("--- [TRADING]: Señal IGNORADA por bajo volumen ---")
 
@@ -208,43 +191,59 @@ def determinar_regimen_diario(token, symbol):
 
 def run_bot():
     token = api_client.obtener_token()
-    if not token:
-        print("No se pudo obtener el token. Abortando.")
-        return
+    if not token: return
 
     symbol = api_client.encontrar_futuro_dolar_mas_corto(token)
-    if not symbol:
-        print("No se pudo encontrar el símbolo del futuro para operar. Abortando.")
-        return
+    if not symbol: return
 
     print(f"\n--- INICIANDO BOT PARA EL SÍMBOLO: {symbol} ---")
 
+    ws_url = "wss://api.remarkets.primary.com.ar/ws/marketdata"
+    ws = websocket.WebSocketApp(ws_url, on_message=on_message, on_error=on_error, on_close=on_close, header={'X-Auth-Token': token})
+
     def on_open(ws):
         print("--- Conexión WebSocket abierta ---")
-        subscription_msg = { "type": "smd", "level": 1, "entries": ["BI", "OF", "LA"], "products": [{"symbol": symbol, "marketId": "ROFX"}], "depth": 5 }
-        ws.send(json.dumps(subscription_msg))
+        sub_msg = {"type": "smd", "level": 1, "entries": ["BI", "OF", "LA"], "products": [{"symbol": symbol, "marketId": "ROFX"}]}
+        ws.send(json.dumps(sub_msg))
         print(f"--- Suscrito a Market Data para {symbol} ---")
+    ws.on_open = on_open
 
-    ws_url = "wss://api.remarkets.primary.com.ar/ws/marketdata"
-    ws = websocket.WebSocketApp(ws_url, on_open=on_open, on_message=on_message, on_error=on_error, on_close=on_close, header={'X-Auth-Token': token})
     ws_thread = threading.Thread(target=ws.run_forever)
     ws_thread.daemon = True
     ws_thread.start()
-    
     time.sleep(5)
 
+    historial_trades = []
+    historial_inicial_dias = max(config.ESTRATEGIA_PARAMS['dias_volatilidad'], config.ESTRATEGIA_PARAMS['dias_momento']) + 5
+    fecha_inicio = datetime.now() - timedelta(days=historial_inicial_dias)
+    initial_trades = api_client.obtener_datos_historicos(token, symbol, fecha_inicio.strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    if initial_trades:
+        historial_trades.extend(initial_trades)
+
     while True:
-        determinar_regimen_diario(token, symbol) # Se ejecuta una vez al día o al inicio
+        determinar_regimen_diario(token, symbol)
         
         now_time = datetime.now().strftime("%H:%M")
         with positions_lock:
-            if len(open_positions) > 0 and now_time > HORA_CIERRE_MERCADO:
+            if len(open_positions) > 0 and now_time > config.HORA_CIERRE_MERCADO:
                 print(f">>> CERRANDO TODAS LAS {len(open_positions)} POSICIONES POR FIN DEL DÍA <<<")
                 enviar_alerta(f"CIERRE FIN DE DÍA\nCerrando {len(open_positions)} posiciones.")
                 open_positions.clear()
 
-        logica_de_trading(symbol)
-        time.sleep(INTERVALO_LOGICA_SEGUNDOS)
+        un_minuto_atras = datetime.now() - timedelta(minutes=1)
+        nuevos_trades = api_client.obtener_datos_historicos(token, symbol, un_minuto_atras.strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+        if nuevos_trades:
+            historial_trades.extend(nuevos_trades)
+            # Opcional: Limitar el tamaño del historial
+            # historial_trades = [t for t in historial_trades if (datetime.now() - pd.to_datetime(t['datetime'])).days < 2]
+
+        datos_para_logica = indicators.procesar_y_calcular_indicadores(historial_trades)
+
+        print(f"\n--- [{datetime.now().strftime('%H:%M:%S')}] Ciclo de Decisión. Posiciones: {len(open_positions)} ---")
+        logica_de_trading(symbol, datos_para_logica)
+
+        time.sleep(config.INTERVALO_LOGICA_SEGUNDOS)
 
 if __name__ == "__main__":
     run_bot()
