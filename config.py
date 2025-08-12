@@ -27,6 +27,25 @@ ESTRATEGIA_PARAMS = {
     "stop_loss_reversion": 0.015,
 }
 
+# --- CONFIGURACIÓN DEL OPTIMIZADOR (NUEVO PARA RANDOM SEARCH) ---
+OPTIMIZER_CONFIG = {
+    # Cantidad de combinaciones aleatorias a probar
+    'n_combinations': 100,
+
+    # Rangos de búsqueda para cada parámetro.
+    # 'type' puede ser 'int' para enteros o 'float' para decimales.
+    'param_ranges': {
+        'dias_volatilidad':   {'min': 5, 'max': 20, 'type': 'int'},
+        'umbral_vol_alto':    {'min': 0.007, 'max': 0.015, 'type': 'float'},
+        'umbral_vol_bajo':    {'min': 0.003, 'max': 0.006, 'type': 'float'},
+        'dias_momento':       {'min': 2, 'max': 10, 'type': 'int'},
+        'stop_loss_tendencia':{'min': 0.01, 'max': 0.03, 'type': 'float'},
+        'take_profit_tendencia': {'min': 0.02, 'max': 0.06, 'type': 'float'},
+        'stop_loss_reversion':{'min': 0.01, 'max': 0.02, 'type': 'float'},
+    }
+}
+
+
 # --- PARÁMETROS DEL BOT EN VIVO ---
 HORA_CIERRE_MERCADO = "14:55"
 MAX_POSICIONES_ABIERTAS = 1

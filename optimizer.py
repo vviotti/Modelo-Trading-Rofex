@@ -1,6 +1,6 @@
 # optimizer.py (Versión Final v2 - Acelerado con Multiprocesamiento de CPU)
 
-import itertools
+import random
 import pandas as pd
 from datetime import datetime, timedelta
 import multiprocessing
@@ -16,16 +16,19 @@ import config
 pd.set_option('display.max_colwidth', None)
 pd.set_option('display.width', 1000) # Para que la tabla se vea más ancha
 
-# Reducimos la grilla de parámetros para una optimización más rápida
-parameter_grid = {
-    'dias_volatilidad': [9, 10],
-    'umbral_vol_alto': [0.009],
-    'umbral_vol_bajo': [0.006],
-    'dias_momento': [2, 3],
-    'stop_loss_tendencia': [0.015, 0.02],
-    'take_profit_tendencia': [0.03, 0.04],
-    'stop_loss_reversion': [0.015],
-}
+def generate_random_combinations(param_ranges, n_combinations):
+    """Genera n_combinations de parámetros aleatorios basados en los rangos definidos."""
+    combinations = []
+    for _ in range(n_combinations):
+        params = {}
+        for key, value_spec in param_ranges.items():
+            if value_spec['type'] == 'int':
+                params[key] = random.randint(value_spec['min'], value_spec['max'])
+            elif value_spec['type'] == 'float':
+                # Redondeamos a 4 decimales para evitar números muy largos
+                params[key] = round(random.uniform(value_spec['min'], value_spec['max']), 4)
+        combinations.append(params)
+    return combinations
 
 def worker_backtest(params_tuple):
     symbol, params, datos_completos = params_tuple
@@ -33,7 +36,7 @@ def worker_backtest(params_tuple):
 
 def optimizar_estrategia_paralelo():
     start_time = time.time()
-    print("--- INICIANDO OPTIMIZADOR DE ESTRATEGIA (CON MÉTRICAS AVANZADAS) ---")
+    print("--- INICIANDO OPTIMIZADOR DE ESTRATEGIA (RANDOM SEARCH) ---")
     
     token = api_client.obtener_token()
     if not token: return
@@ -45,7 +48,10 @@ def optimizar_estrategia_paralelo():
     print(f"\n--- Optimizando para el símbolo: {symbol_to_test} ---")
     
     # Calculamos un historial suficiente para cubrir el backtest y los indicadores
-    dias_historial_requerido = config.DIAS_BACKTEST + max(parameter_grid['dias_volatilidad']) + max(parameter_grid['dias_momento']) + 5 # 5 días de margen
+    # Usamos los valores máximos de los rangos para asegurar suficientes datos
+    max_dias_vol = config.OPTIMIZER_CONFIG['param_ranges']['dias_volatilidad']['max']
+    max_dias_mom = config.OPTIMIZER_CONFIG['param_ranges']['dias_momento']['max']
+    dias_historial_requerido = config.DIAS_BACKTEST + max(max_dias_vol, max_dias_mom) + 5 # 5 días de margen
     fecha_inicio_historial = datetime.now() - timedelta(days=dias_historial_requerido)
 
     trades_data = api_client.obtener_datos_historicos(token, symbol_to_test,
@@ -56,12 +62,15 @@ def optimizar_estrategia_paralelo():
     datos_completos = indicators.procesar_y_calcular_indicadores(trades_data)
     if datos_completos is None: return
 
-    keys, values = zip(*parameter_grid.items())
-    combinaciones = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    # Generar combinaciones aleatorias
+    param_ranges = config.OPTIMIZER_CONFIG['param_ranges']
+    n_combinations = config.OPTIMIZER_CONFIG['n_combinations']
+    combinaciones = generate_random_combinations(param_ranges, n_combinations)
+
     tasks = [(symbol_to_test, params, datos_completos) for params in combinaciones]
     
     num_cores = multiprocessing.cpu_count()
-    print(f"\nSe usarán {num_cores} núcleos de CPU para probar {len(combinaciones)} combinaciones.")
+    print(f"\nSe usarán {num_cores} núcleos de CPU para probar {len(combinaciones)} combinaciones aleatorias.")
 
     resultados = []
     with multiprocessing.Pool(processes=num_cores) as pool:
@@ -86,8 +95,11 @@ def optimizar_estrategia_paralelo():
     
     end_time = time.time()
     
+    # Usamos las keys de la configuración para mostrar los resultados
+    param_keys = list(config.OPTIMIZER_CONFIG['param_ranges'].keys())
+
     print("\n\n--- RANKING DE MEJORES PARÁMETROS ENCONTRADOS ---")
-    display_cols = ['rendimiento', 'max_drawdown'] + list(parameter_grid.keys())
+    display_cols = ['rendimiento', 'max_drawdown'] + param_keys
     print(resultados_df[display_cols].head(5).to_string())
     print("\n--------------------------------------------------")
     print(f"Optimización completada en { (end_time - start_time) / 60:.2f} minutos.")
@@ -100,6 +112,7 @@ def optimizar_estrategia_paralelo():
     
     table_data = []
     colors = ['blue', 'orange', 'green']
+    param_keys = list(config.OPTIMIZER_CONFIG['param_ranges'].keys())
     
     # 2. Iterar sobre los 3 mejores resultados para plotear cada curva
     for i in range(min(3, len(resultados_df))):
@@ -117,7 +130,7 @@ def optimizar_estrategia_paralelo():
         ax.plot(df_curva['timestamp'], df_curva['equity'], label=f'Rank #{i+1} (Rend: {top_resultado["rendimiento"]:.2f}%)', color=colors[i])
         
         # Guardar los datos de los parámetros para la tabla
-        params_list = [f"{top_resultado[key]}" for key in parameter_grid.keys()]
+        params_list = [f"{top_resultado[key]}" for key in param_keys]
         table_data.append(params_list)
 
     # Configurar el gráfico principal
@@ -131,7 +144,7 @@ def optimizar_estrategia_paralelo():
         # Transponer los datos para que los parámetros queden como filas
         table_data = np.array(table_data).T 
         col_labels = [f'Rank #{j+1}' for j in range(len(table_data[0]))]
-        row_labels = list(parameter_grid.keys())
+        row_labels = param_keys
         
         # Ajustar el espacio inferior del gráfico para hacer lugar a la tabla
         fig.subplots_adjust(bottom=0.3)
