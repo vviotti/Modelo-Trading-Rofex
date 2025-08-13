@@ -103,17 +103,17 @@ def optimizar_estrategia_paralelo():
     print(f"Optimización completada en { (end_time - start_time) / 60:.2f} minutos.")
 
     # --- NUEVO: GENERAR GRÁFICO COMPARATIVO CON TABLA ---
-    print("\n--- Generando Gráfico Comparativo de Rendimiento para el Top 3 ---")
+    print("\n--- Generando Gráfico Comparativo de Rendimiento para el Top 25 ---")
     
     # 1. Preparar la figura y los ejes para el gráfico
     fig, ax = plt.subplots(figsize=(15, 8))
     
-    table_data = []
-    colors = ['blue', 'orange', 'green']
-    param_keys = list(config.OPTIMIZER_CONFIG['param_ranges'].keys())
-    
-    # 2. Iterar sobre los 3 mejores resultados para plotear cada curva
-    for i in range(min(3, len(resultados_df))):
+    # 2. Iterar sobre los 25 mejores resultados para plotear cada curva
+    num_to_plot = min(25, len(resultados_df))
+    # Generar un colormap para distinguir las curvas
+    colors = plt.cm.jet(np.linspace(0, 1, num_to_plot))
+
+    for i in range(num_to_plot):
         top_resultado = resultados_df.iloc[i]
         curva = top_resultado['equity_curve']
         
@@ -124,15 +124,20 @@ def optimizar_estrategia_paralelo():
         df_curva = pd.DataFrame(curva)
         df_curva['timestamp'] = pd.to_datetime(df_curva['timestamp'])
         
-        # Plotear la curva de equity en los ejes
-        ax.plot(df_curva['timestamp'], df_curva['equity'], label=f'Rank #{i+1} (Rend: {top_resultado["rendimiento"]:.2f}%)', color=colors[i])
-        
-        # Guardar los datos de los parámetros para la tabla
+        # Plotear la curva. Solo las 3 primeras tendrán una leyenda para no saturar el gráfico.
+        label = f'Rank #{i+1} (Rend: {top_resultado["rendimiento"]:.2f}%)' if i < 3 else None
+        ax.plot(df_curva['timestamp'], df_curva['equity'], label=label, color=colors[i], alpha=0.8, linewidth=1.5 if i < 3 else 1.0)
+
+    # 3. Preparar los datos para la tabla (solo los 3 mejores)
+    table_data = []
+    param_keys = list(config.OPTIMIZER_CONFIG['param_ranges'].keys())
+    for i in range(min(3, len(resultados_df))):
+        top_resultado = resultados_df.iloc[i]
         params_list = [f"{top_resultado[key]}" for key in param_keys]
         table_data.append(params_list)
 
     # Configurar el gráfico principal
-    ax.set_title(f'Comparación de Rendimiento - Top 3 Parámetros\n{symbol_to_test}')
+    ax.set_title(f'Comparación de Rendimiento - Top 25 Parámetros\n{symbol_to_test}')
     ax.set_ylabel('Valor del Portafolio (Equity)')
     ax.grid(True)
     ax.legend()
