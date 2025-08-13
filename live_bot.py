@@ -203,7 +203,7 @@ def run_bot():
     print(f"\n--- INICIANDO BOT PARA EL SÍMBOLO: {symbol} ---")
     enviar_alerta(f"Bot iniciado para {symbol}")
 
-    ws_url = "wss://api.remarkets.primary.com.ar/ws/marketdata"
+    ws_url = "wss://api.remarkets.primary.com.ar/"
     ws = websocket.WebSocketApp(ws_url, on_message=on_message, on_error=on_error, on_close=on_close, header={'X-Auth-Token': token})
 
     def on_open(ws):
