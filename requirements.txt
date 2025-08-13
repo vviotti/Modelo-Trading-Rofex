@@ -9,3 +9,4 @@ matplotlib
 py-cpuinfo
 tqdm
 numpy==1.26.4
+plyer==2.1.0

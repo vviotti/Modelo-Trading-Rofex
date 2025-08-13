@@ -48,10 +48,8 @@ def optimizar_estrategia_paralelo():
     print(f"\n--- Optimizando para el símbolo: {symbol_to_test} ---")
     
     # Calculamos un historial suficiente para cubrir el backtest y los indicadores
-    # Usamos los valores máximos de los rangos para asegurar suficientes datos
-    max_dias_vol = config.OPTIMIZER_CONFIG['param_ranges']['dias_volatilidad']['max']
-    max_dias_mom = config.OPTIMIZER_CONFIG['param_ranges']['dias_momento']['max']
-    dias_historial_requerido = config.DIAS_BACKTEST + max(max_dias_vol, max_dias_mom) + 5 # 5 días de margen
+    # Se necesitan ~90 días de historial para el indicador de volatilidad de 3 meses (18000 velas de 1min)
+    dias_historial_requerido = config.DIAS_BACKTEST + 95 # 90 días para el indicador + 5 de margen
     fecha_inicio_historial = datetime.now() - timedelta(days=dias_historial_requerido)
 
     trades_data = api_client.obtener_datos_historicos(token, symbol_to_test,

@@ -48,8 +48,13 @@ OPTIMIZER_CONFIG = {
 
 # --- PARÁMETROS DEL BOT EN VIVO ---
 HORA_CIERRE_MERCADO = "14:55"
-MAX_POSICIONES_ABIERTAS = 1
+MAX_POSICIONES_ABIERTAS = 2 # Aumentado para permitir un trade por modelo
 FACTOR_AUMENTO_VOLUMEN = 1.5
 INTERVALO_LOGICA_SEGUNDOS = 60
-IMBALANCE_THRESHOLD_LONG = 1.1  # Umbral de desequilibrio para compras
-IMBALANCE_THRESHOLD_SHORT = 0.9 # Umbral de desequilibrio para ventas
+
+# --- PARÁMETROS DEL MODELO 2 (ORDER BOOK - LIVE ONLY) ---
+MODELO2_ACTIVADO = True
+MODELO2_STOP_LOSS = 0.005      # 0.5%
+MODELO2_TAKE_PROFIT = 0.01       # 1.0%
+IMBALANCE_THRESHOLD_LONG = 1.2   # Umbral de desequilibrio para compras (ej. 20% más volumen de compra)
+IMBALANCE_THRESHOLD_SHORT = 0.8  # Umbral de desequilibrio para ventas (ej. 20% menos volumen de compra)
